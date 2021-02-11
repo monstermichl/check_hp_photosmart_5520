@@ -8,9 +8,9 @@ import argparse
 from enum import Enum
 
 # constants
-__PRINTER_XML_NAMESPACE_PUDYN = 'pudyn'
-__PRINTER_XML_NAMESPACE_DD    = 'dd'
-__PRINTER_XML_NAMESPACE_DD2   = 'dd2'
+_PRINTER_XML_NAMESPACE_PUDYN = 'pudyn'
+_PRINTER_XML_NAMESPACE_DD    = 'dd'
+_PRINTER_XML_NAMESPACE_DD2   = 'dd2'
 
 
 class ExitCode(Enum):
@@ -25,15 +25,18 @@ __exit_code = ExitCode.UNKNOWN.value
 
 # XML children callbacks
 def _callback_consumable(xml_node, namespaces):
+    _XML_KEY_COLOR     = 'MarkerColor'
+    _XML_KEY_REMAINING = 'ConsumableRawPercentageLevelRemaining'
+
     class Consumable:
         def __init__(self, name: str, remaining: int):
             self.name      = name
             self.remaining = remaining
 
-    name  = XmlSearcher('MarkerColor'                          , __PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces)
-    color = XmlSearcher('ConsumableRawPercentageLevelRemaining', __PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces)
+    name      = str(getattr(XmlSearcher(_XML_KEY_COLOR    , _PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces), _XML_KEY_COLOR    ))
+    remaining = int(getattr(XmlSearcher(_XML_KEY_REMAINING, _PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces), _XML_KEY_REMAINING))
 
-    return Consumable(name, color)
+    return Consumable(name, remaining)
 
 
 # XML magic
@@ -65,13 +68,6 @@ class XmlSearcher:
         return temp_result
 
 
-# Search groups (namespace, tag-name, children-tag-name, callback)
-searcher = XmlSearcher('ConsumableSubunit', namespace=__PRINTER_XML_NAMESPACE_PUDYN, children=(
-        XmlSearcher('Consumable', namespace=__PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_consumable),
-    ),
-)
-
-
 # XML pre-processing
 def _get_namespaces(xml_string):
     ns = {}
@@ -81,10 +77,10 @@ def _get_namespaces(xml_string):
 
 
 def _verify_host(hostname: str):
-    return re.match(r'(^((http(s)?:\/\/)?www\.)?[a-zA-Z0-9]+\.[a-zA-Z]+$)|(^[0-9]+(\.[0-9]+){3}$)', hostname)
+    return re.match(r'(^(www\.)?[a-zA-Z0-9]+\.[a-zA-Z]+$)|(^[0-9]+(\.[0-9]+){3}$)', hostname)
 
 
-def _echo_status_and_set_exit_code(exit_code: ExitCode, description: str):
+def _exit(exit_code: ExitCode, description: str):
     global __exit_code
 
     if exit_code == ExitCode.OK:
@@ -97,7 +93,7 @@ def _echo_status_and_set_exit_code(exit_code: ExitCode, description: str):
         status = 'UNKNOWN'
 
     print(status + f'{status}|{description}')
-    __exit_code = exit_code.value
+    exit(exit_code.value)
 
 
 def main():
@@ -110,17 +106,41 @@ def main():
     args = parser.parse_args()
 
     if not _verify_host(args.hostname):
-        _echo_status_and_set_exit_code(ExitCode.UNKNOWN, 'Invalid Hostname')
-    else:
-        result  = requests.get(f'{args.hostname}/DevMgmt/ProductUsageDyn.xml', verify=False)
-        content = result.content.decode('utf-8')
-        xml     = ET.fromstring(content)
+        _exit(ExitCode.UNKNOWN, 'Invalid Hostname')
 
-        objects = searcher.search(xml, _get_namespaces(content))
-        objects = None
+    result  = requests.get(f'https://{args.hostname}/DevMgmt/ProductUsageDyn.xml', verify=False)
+    content = result.content.decode('utf-8')
+    xml     = ET.fromstring(content)
+
+    try:
+        _CONSUMABLE_SUBUNIT = 'ConsumableSubunit'
+        _CONSUMABLE         = 'Consumable'
+
+        # Search groups (tag-name, namespace, children-tag-name, callback)
+        searcher = XmlSearcher(_CONSUMABLE_SUBUNIT, namespace=_PRINTER_XML_NAMESPACE_PUDYN, children=(
+                XmlSearcher(_CONSUMABLE, namespace=_PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_consumable),
+            ),
+        )
+        results       = searcher.search(xml, _get_namespaces(content))
+        colors        = getattr(getattr(results, _CONSUMABLE_SUBUNIT), _CONSUMABLE)
+        compare_color = args.color.lower().strip()
+
+        for color in colors:
+            if color.name.lower().strip() == compare_color:
+                if color.remaining <= args.critical:
+                    exit_code = ExitCode.CRITICAL
+                elif color.remaining <= args.warning:
+                    exit_code = ExitCode.CRITICAL
+                else:
+                    exit_code = ExitCode.OK
+                _exit(exit_code, f'{color.remaining}% for {color.name}')
+        _exit(ExitCode.UNKNOWN, 'Unknown color requested')
+
+    except AttributeError as e:
+        _exit(ExitCode.UNKNOWN, 'Unknown attribute requested')
+    except Exception as e:
+        _exit(ExitCode.UNKNOWN, 'An unexpected error has occurred')
 
 
 if __name__ == '__main__':
     main()
-    exit(__exit_code)
-

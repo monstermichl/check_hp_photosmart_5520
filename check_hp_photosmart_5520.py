@@ -130,7 +130,7 @@ def main():
                 if color.remaining <= args.critical:
                     exit_code = ExitCode.CRITICAL
                 elif color.remaining <= args.warning:
-                    exit_code = ExitCode.CRITICAL
+                    exit_code = ExitCode.WARNING
                 else:
                     exit_code = ExitCode.OK
                 _exit(exit_code, f'{color.remaining}% for {color.name}')

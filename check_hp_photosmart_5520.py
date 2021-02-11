@@ -92,7 +92,7 @@ def _exit(exit_code: ExitCode, description: str):
     else:
         status = 'UNKNOWN'
 
-    print(status + f'{status}|{description}')
+    print(f'{status}|{description}')
     exit(exit_code.value)
 
 
@@ -108,7 +108,7 @@ def main():
     if not _verify_host(args.hostname):
         _exit(ExitCode.UNKNOWN, 'Invalid Hostname')
 
-    result  = requests.get(f'https://{args.hostname}/DevMgmt/ProductUsageDyn.xml', verify=False)
+    result  = requests.get(f'http://{args.hostname}/DevMgmt/ProductUsageDyn.xml', verify=False)
     content = result.content.decode('utf-8')
     xml     = ET.fromstring(content)
 

@@ -63,7 +63,7 @@ class FillLevelCheck:
         self.status              = status
 
     def __str__(self):
-        return f'{self.color_name} {self.percentage_actual}%'
+        return f'{self.color_name} {self.percentage_actual}/{self.percentage_warning}/{self.percentage_critical}(%)'
 
 
 class FillLevelCheckDispatcher:
@@ -219,7 +219,7 @@ def main():
             for fill_level in args.fill_level:
                 filllevel_check_dispatcher.add(fill_level[0], int(fill_level[1]), int(fill_level[2]))
             fill_level_check = filllevel_check_dispatcher.perform_check()
-            _exit(fill_level_check.status, performance_data=', '.join([str(check) for check in filllevel_check_dispatcher.checks]))
+            _exit(fill_level_check.status, description=', '.join([str(check) for check in filllevel_check_dispatcher.checks]))
 
         _exit(CheckStatus.UNKNOWN, description='Unknown color requested')
     except AttributeError as e:

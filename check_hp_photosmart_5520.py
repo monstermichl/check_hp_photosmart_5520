@@ -171,8 +171,8 @@ def main():
     global _xml_namespaces
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hostname'  , required=True, type=str, help='Full qualified name or IP-address of printer'                                                                      )
-    parser.add_argument('--fill-level', required=True, type=str, help='Color-fill-level to check (color-name warning-percentage-level critical-percentage-level', action='append', nargs=3)
+    parser.add_argument('--hostname'  , required=True, type=str, help='Full qualified name or IP-address of printer'                                                                       )
+    parser.add_argument('--fill-level', required=True, type=str, help='Color-fill-level to check (color-name warning-percentage-level critical-percentage-level)', action='append', nargs=3)
 
     args = parser.parse_args()
 

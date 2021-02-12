@@ -43,4 +43,4 @@ I had to deal with the issue that Icinga tried to pass the given **--fill-level*
 and Icinga passed it as
 > --fill-level "Magenta 30 10 Black 30 10"
 
-My workaround for this issue was to pass only the first argument with the argument name (**--fill-level** Magenta), added an extra Command argument for each part --fill-level part-argument (e.g. 30, 10, Black, 30, ...) and suppressed the argument name (**--fill-level**) for at each one. Maybe there's a better solution. If so, please let me know :)
+My workaround for this issue was to pass only the first argument with the argument name (**--fill-level** Magenta), added an extra Command argument for each --fill-level part-argument (e.g. 30, 10, Black, 30, ...) and suppressed the argument name (**--fill-level**) for at each one. Maybe there's a better solution. If so, please let me know :)

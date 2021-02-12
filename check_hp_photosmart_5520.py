@@ -25,22 +25,6 @@ _xml            = None
 _xml_namespaces = {}
 
 
-# XML children callbacks
-def _callback_consumable(xml_node, namespaces):
-    _XML_KEY_COLOR     = 'MarkerColor'
-    _XML_KEY_REMAINING = 'ConsumableRawPercentageLevelRemaining'
-
-    class Consumable:
-        def __init__(self, name: str, remaining: int):
-            self.name      = name
-            self.remaining = remaining
-
-    name      = str(getattr(XmlSearcher(_XML_KEY_COLOR    , _PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces), _XML_KEY_COLOR    ))
-    remaining = int(getattr(XmlSearcher(_XML_KEY_REMAINING, _PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces), _XML_KEY_REMAINING))
-
-    return Consumable(name, remaining)
-
-
 # XML magic
 class XmlSearcher:
     def __init__(self, tag_name, namespace=None, children=None, callback=None):
@@ -93,7 +77,7 @@ class FillLevelCheckDispatcher:
 
         check_status = CheckStatus.UNKNOWN
         searcher     = XmlSearcher(_CONSUMABLE_SUBUNIT, namespace=_PRINTER_XML_NAMESPACE_PUDYN, children=(
-                XmlSearcher(_CONSUMABLE, namespace=_PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_consumable),
+                XmlSearcher(_CONSUMABLE, namespace=_PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_filllevel),
             ),
         )
         results     = searcher.search(_xml, _xml_namespaces)
@@ -123,6 +107,22 @@ def _get_namespaces(xml_string):
     for match in re.findall(r'xmlns:(\w+)\s*=\s*"(.*?)"', xml_string):
         ns[match[0]] = match[1]
     return ns
+
+
+# callbacks
+def _callback_filllevel(xml_node, namespaces):
+    _XML_KEY_COLOR     = 'MarkerColor'
+    _XML_KEY_REMAINING = 'ConsumableRawPercentageLevelRemaining'
+
+    class Consumable:
+        def __init__(self, name: str, remaining: int):
+            self.name      = name
+            self.remaining = remaining
+
+    name      = str(getattr(XmlSearcher(_XML_KEY_COLOR    , _PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces), _XML_KEY_COLOR    ))
+    remaining = int(getattr(XmlSearcher(_XML_KEY_REMAINING, _PRINTER_XML_NAMESPACE_DD, callback=lambda x, y: x.text).search(xml_node, namespaces), _XML_KEY_REMAINING))
+
+    return Consumable(name, remaining)
 
 
 def _verify_host(hostname: str):

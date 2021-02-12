@@ -124,8 +124,9 @@ class FillLevelCheckDispatcher:
 
 
 class ArgumentSplitException(Exception):
-    def __init__(self, array_length: int, number_arguments: int):
-        super().__init__(f'Array length is {array_length} but must be a multiple of {number_arguments} to be splitted')
+    def __init__(self, array, number_arguments: int):
+        array_output = ' '.join(array)
+        super().__init__(f'Array length is {len(array)} but must be a multiple of {number_arguments} to be splitted ({array_output})')
 
 
 # XML pre-processing
@@ -161,7 +162,7 @@ def _split_multiple_args(array: list, number_arguments: int):
     length_array   = len(array)
 
     if length_array % number_arguments != 0:
-        raise ArgumentSplitException(length_array, number_arguments)
+        raise ArgumentSplitException(array, number_arguments)
 
     for i in range(0, len(array), number_arguments):
         splitted_array.append(array[i:i+number_arguments])
@@ -223,6 +224,8 @@ def main():
         _exit(CheckStatus.UNKNOWN, description='Unknown color requested')
     except AttributeError as e:
         _exit(CheckStatus.UNKNOWN, description='Unknown attribute requested')
+    except ArgumentSplitException as e:
+        _exit(CheckStatus.UNKNOWN, description=str(e))
     except Exception as e:
         _exit(CheckStatus.UNKNOWN, description='An unexpected error has occurred')
 

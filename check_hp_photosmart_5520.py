@@ -13,14 +13,16 @@ _PRINTER_XML_NAMESPACE_DD    = 'dd'
 _PRINTER_XML_NAMESPACE_DD2   = 'dd2'
 
 
-class ExitCode(Enum):
+class CheckStatus(Enum):
     OK       = 0
     WARNING  = 1
     CRITICAL = 2
     UNKNOWN  = 3
 
 
-__exit_code = ExitCode.UNKNOWN.value
+_check_status   = CheckStatus.UNKNOWN.value
+_xml            = None
+_xml_namespaces = {}
 
 
 # XML children callbacks
@@ -68,6 +70,53 @@ class XmlSearcher:
         return temp_result
 
 
+class FillLevelCheck:
+    def __init__(self, color_name: str, percentage_warning: int, percentage_critial: int):
+        self.color_name          = color_name
+        self.percentage_warning  = percentage_warning
+        self.percentage_critical = percentage_critial
+
+
+class FillLevelCheckDispatcher:
+    def __init__(self):
+        self._checks = []
+
+    def add(self, color_name: str, percentage_warning: int, percentage_critial: int):
+        self._checks.append(FillLevelCheck(color_name, percentage_warning, percentage_critial))
+
+    def perform_check(self):
+        global _xml
+        global _xml_namespaces
+
+        _CONSUMABLE_SUBUNIT = 'ConsumableSubunit'
+        _CONSUMABLE         = 'Consumable'
+
+        check_status = CheckStatus.UNKNOWN
+        searcher     = XmlSearcher(_CONSUMABLE_SUBUNIT, namespace=_PRINTER_XML_NAMESPACE_PUDYN, children=(
+                XmlSearcher(_CONSUMABLE, namespace=_PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_consumable),
+            ),
+        )
+        results     = searcher.search(_xml, _xml_namespaces)
+        color_infos = getattr(getattr(results, _CONSUMABLE_SUBUNIT), _CONSUMABLE)
+
+        def has_highest_prio(compare_value: CheckStatus):
+            return (check_status == CheckStatus.UNKNOWN or check_status.value <= compare_value.value)
+
+        for check in self._checks:
+            check_color_name = check.color_name.strip().lower()
+            if isinstance(check, FillLevelCheck):
+                for color_info in color_infos:
+                    if color_info.name.lower().strip() == check_color_name:
+                        if color_info.remaining <= check.percentage_critical:
+                            check_status = CheckStatus.CRITICAL
+                        elif color_info.remaining <= check.percentage_warning and has_highest_prio(CheckStatus.CRITICAL):
+                            check_status = CheckStatus.WARNING
+                        elif has_highest_prio(CheckStatus.WARNING):
+                            check_status = CheckStatus.OK
+                        break
+
+        return check_status
+
 # XML pre-processing
 def _get_namespaces(xml_string):
     ns = {}
@@ -80,66 +129,57 @@ def _verify_host(hostname: str):
     return re.match(r'(^(www\.)?[a-zA-Z0-9]+\.[a-zA-Z]+$)|(^[0-9]+(\.[0-9]+){3}$)', hostname)
 
 
-def _exit(exit_code: ExitCode, description: str):
-    global __exit_code
+def _exit(check_status: CheckStatus, description: str=None):
+    global _check_status
 
-    if exit_code == ExitCode.OK:
+    if check_status == CheckStatus.OK:
         status = 'OK'
-    elif exit_code == ExitCode.WARNING:
+    elif check_status == CheckStatus.WARNING:
         status = 'WARNING'
-    elif exit_code == ExitCode.CRITICAL:
+    elif check_status == CheckStatus.CRITICAL:
         status = 'CRITICAL'
     else:
         status = 'UNKNOWN'
 
-    print(f'{status}|{description}')
-    exit(exit_code.value)
+    print(f'{status}' + (f'|{description}' if description is not None else ''))
+    exit(check_status.value)
 
 
 def main():
+    global _xml
+    global _xml_namespaces
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hostname', required=True, type=str, help='Full qualified name or IP-address of printer'           )
-    parser.add_argument('--color'   , required=True, type=str, help='Color to check'                                         )
-    parser.add_argument('--warning' , required=True, type=int, help='Percentage level at which a warning is triggered'       )
-    parser.add_argument('--critical', required=True, type=int, help='Percentage level at which a critical error is triggered')
+    parser.add_argument('--hostname'  , required=True, type=str, help='Full qualified name or IP-address of printer'                                                                      )
+    parser.add_argument('--fill-level', required=True, type=str, help='Color-fill-level to check (color-name warning-percentage-level critical-percentage-level', action='append', nargs=3)
 
     args = parser.parse_args()
 
     if not _verify_host(args.hostname):
-        _exit(ExitCode.UNKNOWN, 'Invalid Hostname')
+        _exit(CheckStatus.UNKNOWN, 'Invalid Hostname')
 
     result  = requests.get(f'http://{args.hostname}/DevMgmt/ProductUsageDyn.xml', verify=False)
     content = result.content.decode('utf-8')
-    xml     = ET.fromstring(content)
+
+    # initialize global variables
+    _xml            = ET.fromstring(content)
+    _xml_namespaces = _get_namespaces(content)
 
     try:
-        _CONSUMABLE_SUBUNIT = 'ConsumableSubunit'
-        _CONSUMABLE         = 'Consumable'
+        # process color checks
+        if args.fill_level:
+            filllevel_check_dispatcher = FillLevelCheckDispatcher()
 
-        # Search groups (tag-name, namespace, children-tag-name, callback)
-        searcher = XmlSearcher(_CONSUMABLE_SUBUNIT, namespace=_PRINTER_XML_NAMESPACE_PUDYN, children=(
-                XmlSearcher(_CONSUMABLE, namespace=_PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_consumable),
-            ),
-        )
-        results       = searcher.search(xml, _get_namespaces(content))
-        colors        = getattr(getattr(results, _CONSUMABLE_SUBUNIT), _CONSUMABLE)
-        compare_color = args.color.lower().strip()
+            for fill_level in args.fill_level:
+                filllevel_check_dispatcher.add(fill_level[0], int(fill_level[1]), int(fill_level[2]))
+            color_check_result = filllevel_check_dispatcher.perform_check()
+            _exit(color_check_result)
 
-        for color in colors:
-            if color.name.lower().strip() == compare_color:
-                if color.remaining <= args.critical:
-                    exit_code = ExitCode.CRITICAL
-                elif color.remaining <= args.warning:
-                    exit_code = ExitCode.WARNING
-                else:
-                    exit_code = ExitCode.OK
-                _exit(exit_code, f'{color.remaining}% for {color.name}')
-        _exit(ExitCode.UNKNOWN, 'Unknown color requested')
-
+        _exit(CheckStatus.UNKNOWN, 'Unknown color requested')
     except AttributeError as e:
-        _exit(ExitCode.UNKNOWN, 'Unknown attribute requested')
+        _exit(CheckStatus.UNKNOWN, 'Unknown attribute requested')
     except Exception as e:
-        _exit(ExitCode.UNKNOWN, 'An unexpected error has occurred')
+        _exit(CheckStatus.UNKNOWN, 'An unexpected error has occurred')
 
 
 if __name__ == '__main__':

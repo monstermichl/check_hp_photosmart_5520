@@ -11,19 +11,21 @@ Just a small Icinga2/Nagios plugin which I wrote for a studies class. It can pro
 > -h, --help            show this help message and exit
 
 
---fill-level requires the color-name, the warning percentage-level and the critical percentage-level e.g.
+**--fill-level** requires the color-name, the warning percentage-level and the critical percentage-level e.g.
 > python3 check_hp_photosmart_5520.py --host 192.168.1.2 --fill-level Magenta 30 10
 
---fill-level also supports to be called multiple times e.g.
+**--fill-level** also supports to be called multiple times e.g.
 > python3 check_hp_photosmart_5520.py --host 192.168.1.2 --fill-level Magenta 30 10 --fill-level Black 30 10
 
-However, since this caused some problems passing it to Icinga, all colors can be provided using --fill-level one time e.g.
+However, since this caused some problems passing it to Icinga, all colors can be provided using **--fill-level** one time e.g.
 > python3 check_hp_photosmart_5520.py --host 192.168.1.2 --fill-level Magenta 30 10 Black 30 10
 
 ## Installation
 Download check_hp_photosmart_5520.py and copy it into the Nagios plugin folder
 > git clone https://github.com/monstermichl/check_hp_photosmart_5520
+>
 > cd check_hp_photosmart_5520
+>
 > sudo cp check_hp_photosmart_5520.py /usr/lib/nagios/plugins/
 
 Make it executable
@@ -33,10 +35,10 @@ Restart Icinga2/Nagios
 > sudo systemctl restart icinga2
 
 ## Issues
-I had to deal with the issue that Icinga tried to pass the given --fill-level argument as one string. So the argument was
+I had to deal with the issue that Icinga tried to pass the given **--fill-level** argument as one string. So the argument was
 > --fill-level Magenta 30 10 Black 30 10
 
 and Icinga passed it as
 > --fill-level "Magenta 30 10 Black 30 10"
 
-My workaround for this issue was to pass only the first argument with the argument name (--fill-level Magenta), added an extra Command argument for each part --fill-level part-argument (e.g. 30, 10, Black, 30, ...) and suppressed the argument name (--fill-level) for at each one. Maybe there's a better solution. If so, please let me know :)
+My workaround for this issue was to pass only the first argument with the argument name (**--fill-level** Magenta), added an extra Command argument for each part --fill-level part-argument (e.g. 30, 10, Black, 30, ...) and suppressed the argument name (**--fill-level**) for at each one. Maybe there's a better solution. If so, please let me know :)

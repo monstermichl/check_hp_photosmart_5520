@@ -122,6 +122,12 @@ class FillLevelCheckDispatcher:
 
         return fill_level_check
 
+
+class ArgumentSplitException(Exception):
+    def __init__(self, array_length: int, number_arguments: int):
+        super().__init__(f'Array length is {array_length} but must be a multiple of {number_arguments} to be splitted')
+
+
 # XML pre-processing
 def _get_namespaces(xml_string):
     ns = {}
@@ -150,6 +156,18 @@ def _verify_host(hostname: str):
     return re.match(r'(^(www\.)?[a-zA-Z0-9]+\.[a-zA-Z]+$)|(^[0-9]+(\.[0-9]+){3}$)', hostname)
 
 
+def _split_multiple_args(array: list, number_arguments: int):
+    splitted_array = []
+    length_array   = len(array)
+
+    if length_array % number_arguments != 0:
+        raise ArgumentSplitException(length_array, number_arguments)
+
+    for i in range(0, len(array), number_arguments):
+        splitted_array.append(array[i:i+number_arguments])
+    return splitted_array
+
+
 def _exit(check_status: CheckStatus, description: str=None, performance_data: str=None):
     global _check_status
 
@@ -171,8 +189,8 @@ def main():
     global _xml_namespaces
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--hostname'  , required=True, type=str, help='Full qualified name or IP-address of printer'                                                                       )
-    parser.add_argument('--fill-level', required=True, type=str, help='Color-fill-level to check (color-name warning-percentage-level critical-percentage-level)', action='append', nargs=3)
+    parser.add_argument('--hostname'  , required=True, type=str, help='Full qualified name or IP-address of printer'                                                                         )
+    parser.add_argument('--fill-level', required=True, type=str, help='Color-fill-level to check (color-name warning-percentage-level critical-percentage-level)', action='append', nargs='+')
 
     args = parser.parse_args()
 
@@ -189,6 +207,12 @@ def main():
     try:
         # process color checks
         if args.fill_level:
+            _LENGTH_ARGUMENTS_FILL_LEVEL = 3
+
+            # multiple colors can also be provided with one --fill-level parameter
+            fill_level_length = len(args.fill_level)
+            if fill_level_length == 1:
+                args.fill_level = _split_multiple_args(args.fill_level[0], _LENGTH_ARGUMENTS_FILL_LEVEL)
             filllevel_check_dispatcher = FillLevelCheckDispatcher()
 
             for fill_level in args.fill_level:
@@ -196,11 +220,11 @@ def main():
             fill_level_check = filllevel_check_dispatcher.perform_check()
             _exit(fill_level_check.status, performance_data=', '.join([str(check) for check in filllevel_check_dispatcher.checks]))
 
-        _exit(CheckStatus.UNKNOWN, 'Unknown color requested')
+        _exit(CheckStatus.UNKNOWN, description='Unknown color requested')
     except AttributeError as e:
-        _exit(CheckStatus.UNKNOWN, 'Unknown attribute requested')
+        _exit(CheckStatus.UNKNOWN, description='Unknown attribute requested')
     except Exception as e:
-        _exit(CheckStatus.UNKNOWN, 'An unexpected error has occurred')
+        _exit(CheckStatus.UNKNOWN, description='An unexpected error has occurred')
 
 
 if __name__ == '__main__':

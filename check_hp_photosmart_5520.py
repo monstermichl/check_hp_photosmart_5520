@@ -55,18 +55,23 @@ class XmlSearcher:
 
 
 class FillLevelCheck:
-    def __init__(self, color_name: str, percentage_warning: int, percentage_critial: int):
+    def __init__(self, color_name: str, percentage_warning: int, percentage_critial: int, percentage_actual: int=0, status: CheckStatus=None):
         self.color_name          = color_name
         self.percentage_warning  = percentage_warning
         self.percentage_critical = percentage_critial
+        self.percentage_actual   = percentage_actual
+        self.status              = status
+
+    def __str__(self):
+        return f'{self.color_name} {self.percentage_actual}%'
 
 
 class FillLevelCheckDispatcher:
     def __init__(self):
-        self._checks = []
+        self.checks = []
 
     def add(self, color_name: str, percentage_warning: int, percentage_critial: int):
-        self._checks.append(FillLevelCheck(color_name, percentage_warning, percentage_critial))
+        self.checks.append(FillLevelCheck(color_name, percentage_warning, percentage_critial))
 
     def perform_check(self):
         global _xml
@@ -75,8 +80,8 @@ class FillLevelCheckDispatcher:
         _CONSUMABLE_SUBUNIT = 'ConsumableSubunit'
         _CONSUMABLE         = 'Consumable'
 
-        check_status = CheckStatus.UNKNOWN
-        searcher     = XmlSearcher(_CONSUMABLE_SUBUNIT, namespace=_PRINTER_XML_NAMESPACE_PUDYN, children=(
+        fill_level_check = None
+        searcher         = XmlSearcher(_CONSUMABLE_SUBUNIT, namespace=_PRINTER_XML_NAMESPACE_PUDYN, children=(
                 XmlSearcher(_CONSUMABLE, namespace=_PRINTER_XML_NAMESPACE_PUDYN, callback=_callback_filllevel),
             ),
         )
@@ -84,22 +89,38 @@ class FillLevelCheckDispatcher:
         color_infos = getattr(getattr(results, _CONSUMABLE_SUBUNIT), _CONSUMABLE)
 
         def has_highest_prio(compare_value: CheckStatus):
-            return (check_status == CheckStatus.UNKNOWN or check_status.value <= compare_value.value)
+            return (fill_level_check is None or fill_level_check.status == CheckStatus.UNKNOWN or fill_level_check.status.value <= compare_value.value)
 
-        for check in self._checks:
+        for check in self.checks:
             check_color_name = check.color_name.strip().lower()
             if isinstance(check, FillLevelCheck):
                 for color_info in color_infos:
                     if color_info.name.lower().strip() == check_color_name:
+                        copy = False
+
+                        # perform status evaluation
                         if color_info.remaining <= check.percentage_critical:
-                            check_status = CheckStatus.CRITICAL
-                        elif color_info.remaining <= check.percentage_warning and has_highest_prio(CheckStatus.CRITICAL):
-                            check_status = CheckStatus.WARNING
-                        elif has_highest_prio(CheckStatus.WARNING):
-                            check_status = CheckStatus.OK
+                            temp_check_status = CheckStatus.CRITICAL
+                            copy              = True
+                        elif color_info.remaining <= check.percentage_warning:
+                            temp_check_status = CheckStatus.WARNING
+                            if has_highest_prio(CheckStatus.CRITICAL):
+                                copy = True
+                        else:
+                            temp_check_status = CheckStatus.OK
+                            if has_highest_prio(CheckStatus.WARNING):
+                                copy = True
+
+                        # assign individual status
+                        check.percentage_actual = color_info.remaining
+                        check.status            = temp_check_status
+
+                        # if copy is true, the currently processed color has the highest status
+                        if copy:
+                            fill_level_check = check
                         break
 
-        return check_status
+        return fill_level_check
 
 # XML pre-processing
 def _get_namespaces(xml_string):
@@ -129,7 +150,7 @@ def _verify_host(hostname: str):
     return re.match(r'(^(www\.)?[a-zA-Z0-9]+\.[a-zA-Z]+$)|(^[0-9]+(\.[0-9]+){3}$)', hostname)
 
 
-def _exit(check_status: CheckStatus, description: str=None):
+def _exit(check_status: CheckStatus, description: str=None, performance_data: str=None):
     global _check_status
 
     if check_status == CheckStatus.OK:
@@ -141,7 +162,7 @@ def _exit(check_status: CheckStatus, description: str=None):
     else:
         status = 'UNKNOWN'
 
-    print(f'{status}' + (f'|{description}' if description is not None else ''))
+    print(f'{status}' + (f' - {description}' if description is not None else '') + (f'|{performance_data}' if performance_data is not None else ''))
     exit(check_status.value)
 
 
@@ -172,8 +193,8 @@ def main():
 
             for fill_level in args.fill_level:
                 filllevel_check_dispatcher.add(fill_level[0], int(fill_level[1]), int(fill_level[2]))
-            color_check_result = filllevel_check_dispatcher.perform_check()
-            _exit(color_check_result)
+            fill_level_check = filllevel_check_dispatcher.perform_check()
+            _exit(fill_level_check.status, performance_data=', '.join([str(check) for check in filllevel_check_dispatcher.checks]))
 
         _exit(CheckStatus.UNKNOWN, 'Unknown color requested')
     except AttributeError as e:

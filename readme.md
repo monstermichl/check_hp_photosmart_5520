@@ -29,6 +29,8 @@ Download check_hp_photosmart_5520.py and copy it into the Nagios plugin folder
 > sudo cp check_hp_photosmart_5520.py /usr/lib/nagios/plugins/
 
 Make it executable
+> cd /usr/lib/nagios/plugins/
+>
 > sudo chmod a+x check_hp_photosmart_5520.py
 
 Restart Icinga2/Nagios
